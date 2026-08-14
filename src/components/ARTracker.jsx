@@ -1,5 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
-import 'mind-ar/dist/mindar-image-three.prod.js';
+
+const loadScript = (src) => new Promise((resolve, reject) => {
+  const existing = document.querySelector(`script[src="${src}"]`);
+  if (existing) {
+    if (existing.dataset.loaded === 'true') {
+      resolve();
+      return;
+    }
+    existing.addEventListener('load', () => resolve(), { once: true });
+    existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+    return;
+  }
+
+  const script = document.createElement('script');
+  script.src = src;
+  script.async = true;
+  script.addEventListener('load', () => {
+    script.dataset.loaded = 'true';
+    resolve();
+  }, { once: true });
+  script.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+  document.head.appendChild(script);
+});
 
 export const ARTracker = ({ 
   hotspots, 
@@ -50,6 +72,9 @@ export const ARTracker = ({
 
     const initTargetTracking = async () => {
       try {
+        await loadScript('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js');
+        await loadScript('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
+
         const MindAR = window.MINDAR?.IMAGE;
         if (!MindAR) {
           throw new Error('MindAR image tracking is unavailable');
@@ -65,8 +90,16 @@ export const ARTracker = ({
           muralImage.src = '/mural.jpg';
         });
 
-        const compiledTargets = await compiler.compileImageTargets([muralImage], () => {});
-        const outputBuffer = compiler.exportData();
+        const outputBuffer = await new Promise((resolve, reject) => {
+          try {
+            compiler.compileImageTargets([muralImage], () => {}).then(() => {
+              resolve(compiler.exportData());
+            }).catch(reject);
+          } catch (error) {
+            reject(error);
+          }
+        });
+
         const imageTargetUrl = URL.createObjectURL(
           new Blob([outputBuffer], { type: 'application/octet-stream' })
         );

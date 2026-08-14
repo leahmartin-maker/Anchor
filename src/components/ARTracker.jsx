@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import WeatherHUD from './WeatherHUD';
 
 const loadScript = (src) => new Promise((resolve, reject) => {
   const existing = document.querySelector(`script[src="${src}"]`);
@@ -189,11 +190,7 @@ export const ARTracker = ({
         ))}
       </div>
 
-      {weatherOverlay && (
-        <div className="absolute top-4 left-4 pointer-events-auto z-10">
-          <WeatherWidget data={weatherOverlay} />
-        </div>
-      )}
+      <WeatherHUD />
 
       {cameraReady && targetFound && (
         <div className="absolute top-4 right-4 z-10 pointer-events-none rounded-full bg-green-500 bg-opacity-90 px-3 py-1 text-xs font-semibold text-white shadow-lg">

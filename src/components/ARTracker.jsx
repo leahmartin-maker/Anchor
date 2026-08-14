@@ -1,16 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 import WeatherHUD from './WeatherHUD';
 
-const loadMindAR = async () => {
-  try {
-    await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
-    const mod = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
-    return mod?.default ?? window.MINDAR?.IMAGE ?? null;
-  } catch (error) {
-    console.warn('MindAR failed to load:', error);
-    return null;
+const loadMindAR = () => new Promise((resolve, reject) => {
+  if (window.MINDAR?.MindARThree && window.MINDAR?.Compiler) {
+    resolve(window.MINDAR);
+    return;
   }
-};
+
+  const existingScript = document.querySelector('script[data-mindar-loader]');
+  if (existingScript) {
+    existingScript.addEventListener('load', () => {
+      if (window.MINDAR?.MindARThree && window.MINDAR?.Compiler) {
+        resolve(window.MINDAR);
+      } else {
+        reject(new Error('MindAR global did not initialize'));
+      }
+    }, { once: true });
+    existingScript.addEventListener('error', () => {
+      reject(new Error('Failed to load MindAR script'));
+    }, { once: true });
+    return;
+  }
+
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js';
+  script.async = true;
+  script.setAttribute('data-mindar-loader', 'true');
+  script.onload = () => {
+    if (window.MINDAR?.MindARThree && window.MINDAR?.Compiler) {
+      resolve(window.MINDAR);
+    } else {
+      reject(new Error('MindAR script loaded but global API is unavailable'));
+    }
+  };
+  script.onerror = () => reject(new Error('Failed to load MindAR script'));
+  document.head.appendChild(script);
+});
 
 export const ARTracker = ({ 
   hotspots, 

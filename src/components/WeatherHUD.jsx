@@ -105,7 +105,7 @@ const getNearestStation = async (latitude, longitude) => {
 const getWaterTemperature = async (stationId) => {
   if (!stationId) return null;
 
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const today = formatNoaaDate(new Date());
   const response = await axios.get(
     `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_temperature&application=Anchor&station=${stationId}&begin_date=${today}&end_date=${today}&units=english&time_zone=gmt&format=json`
   );

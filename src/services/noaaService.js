@@ -3,6 +3,11 @@ import axios from 'axios';
 
 const NOAA_API_BASE = 'https://api.weather.gov';
 
+const formatNoaaDate = (date) => {
+  const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return localDate.toISOString().slice(0, 10).replace(/-/g, '');
+};
+
 export const fetchWeatherData = async (latitude, longitude) => {
   try {
     // Get grid point data
@@ -28,8 +33,7 @@ export const fetchWeatherData = async (latitude, longitude) => {
       const station = stations[0];
 
       if (station?.id) {
-        const now = new Date();
-        const dateString = now.toISOString().slice(0, 10).replace(/-/g, '');
+        const dateString = formatNoaaDate(new Date());
 
         const waterResponse = await axios.get(
           `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_temperature&application=Anchor&station=${station.id}&begin_date=${dateString}&end_date=${dateString}&units=metric&time_zone=gmt&format=json`

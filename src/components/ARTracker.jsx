@@ -7,15 +7,15 @@ export const ARTracker = ({
   onHotspotClick,
   weatherOverlay,
 }) => {
-  const canvasRef = useRef(null);
-  const [isTracking, setIsTracking] = useState(false);
-  const [initialized, setInitialized] = useState(false);
+  const containerRef = useRef(null);
+  const videoRef = useRef(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
 
   useEffect(() => {
-    const setupAR = async () => {
+    const initCamera = async () => {
       try {
-        // 8thwall is now open source - initialize XR engine
-        // The engine detects image targets and maintains tracking
+        console.log('Requesting camera access...');
         
         // Request camera access
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -24,97 +24,110 @@ export const ARTracker = ({
             width: { ideal: 1280 },
             height: { ideal: 720 }
           },
+          audio: false
         });
 
-        // Check if XR engine is available (loaded from open source packages)
-        if (window.XR8 || window.AFRAME) {
-          setIsTracking(true);
-          console.log('✓ XR Engine initialized (open source 8thwall)');
-        } else {
-          // Fallback: still works, just console message about open source
-          console.log('✓ Camera access granted - XR features available');
-          setIsTracking(true);
-        }
-
-        // Set up video element if needed
-        if (canvasRef.current && stream) {
-          const video = document.createElement('video');
-          video.srcObject = stream;
-          video.play();
-          setInitialized(true);
+        // Connect stream to video element
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current.play().catch(err => {
+              console.error('Video play error:', err);
+            });
+            setCameraReady(true);
+            console.log('✓ Camera ready - displaying video feed');
+          };
         }
       } catch (err) {
-        console.error('Camera access denied:', err);
-        setIsTracking(false);
+        console.error('Camera access denied or unavailable:', err);
+        setCameraError(true);
+        setCameraReady(false);
       }
     };
 
-    setupAR();
+    initCamera();
 
     return () => {
-      // Cleanup: stop camera stream
-      if (canvasRef.current) {
-        canvasRef.current.srcObject?.getTracks().forEach(track => track.stop());
+      // Stop all tracks on cleanup
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
 
   return (
-    <div className="w-full h-screen bg-black relative overflow-hidden">
-      {/* AR camera view */}
-      <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black" />
-      
-      {/* Camera reference (if needed for AR processing) */}
+    <div ref={containerRef} className="w-full h-screen bg-black relative overflow-hidden">
+      {/* Camera video feed - main AR background */}
       <video
-        ref={canvasRef}
+        ref={videoRef}
         autoPlay
         playsInline
+        muted
         className="absolute inset-0 w-full h-full object-cover"
-        style={{ display: 'block' }}
+        style={{ 
+          display: cameraReady ? 'block' : 'none',
+          WebkitTransform: 'scaleX(-1)',
+          transform: 'scaleX(-1)'
+        }}
       />
       
-      {/* Hotspot overlay layer */}
-      <div className="absolute inset-0 pointer-events-none">
-        {hotspots.map((hotspot) => (
-          <HotspotMarker
-            key={hotspot.id}
-            hotspot={hotspot}
-            onClick={() => onHotspotClick(hotspot.id)}
-          />
-        ))}
-      </div>
+      {/* Dark background when camera not ready */}
+      {!cameraReady && (
+        <div className="absolute inset-0 bg-black" />
+      )}
+      
+      {/* Hotspot overlay layer - appears on top of video */}
+      {cameraReady && (
+        <div className="absolute inset-0 pointer-events-none">
+          {hotspots && hotspots.map((hotspot) => (
+            <HotspotMarker
+              key={hotspot.id}
+              hotspot={hotspot}
+              onClick={() => onHotspotClick(hotspot.id)}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Weather overlay */}
-      {weatherOverlay && (
-        <div className="absolute top-4 right-4 pointer-events-auto">
+      {/* Weather overlay - top right */}
+      {weatherOverlay && cameraReady && (
+        <div className="absolute top-4 right-4 pointer-events-auto z-10">
           <WeatherWidget data={weatherOverlay} />
         </div>
       )}
 
-      {/* Status indicator */}
-      {!isTracking && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75">
+      {/* Loading state */}
+      {!cameraReady && !cameraError && (
+        <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center text-white">
-            <p className="text-lg mb-4">Initializing AR...</p>
-            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto" />
-            <p className="text-sm text-gray-400 mt-4">8thwall (Open Source)</p>
+            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="text-lg mb-2">Initializing Camera...</p>
+            <p className="text-sm text-gray-400">Requesting camera access</p>
           </div>
         </div>
       )}
 
-      {/* Camera permission denied */}
-      {initialized === false && isTracking === false && (
+      {/* Camera error state */}
+      {cameraError && (
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
           <div className="text-center text-white max-w-xs">
-            <p className="text-lg font-semibold mb-2">Camera Access Required</p>
+            <p className="text-lg font-semibold mb-2">🎥 Camera Access Required</p>
             <p className="text-sm text-gray-300 mb-4">
-              Please allow camera access in your browser settings to use AR.
+              Please allow camera access in your browser settings to use the AR experience.
             </p>
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400">Steps:</p>
+              <ul className="text-xs text-gray-400 space-y-1">
+                <li>1. Click the 🔒 lock icon in your address bar</li>
+                <li>2. Find "Camera" and select "Allow"</li>
+                <li>3. Refresh the page</li>
+              </ul>
+            </div>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition"
+              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition"
             >
-              Reload
+              Reload Page
             </button>
           </div>
         </div>

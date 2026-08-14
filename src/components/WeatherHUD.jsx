@@ -150,12 +150,14 @@ const getWaveForecast = async (latitude, longitude) => {
   }
 };
 
+const formatNoaaDate = (date) => date.toISOString().slice(0, 10).replace(/-/g, '');
+
 const getTideInfo = async (stationId) => {
   if (!stationId) return { currentTideFt: null, nextHigh: null, nextLow: null };
 
   const now = new Date();
-  const startDate = new Date(now.getTime() - 60 * 60 * 1000).toISOString().slice(0, 10);
-  const endDate = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const startDate = formatNoaaDate(new Date(now.getTime() - 60 * 60 * 1000));
+  const endDate = formatNoaaDate(new Date(now.getTime() + 48 * 60 * 60 * 1000));
 
   const response = await axios.get(
     `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&application=Anchor&station=${stationId}&begin_date=${startDate}&end_date=${endDate}&datum=MLLW&time_zone=gmt&units=feet&format=json`

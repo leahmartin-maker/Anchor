@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import WeatherHUD from './WeatherHUD';
 
 const loadMindAR = async () => {
-  await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
-  if (!window.MINDAR?.IMAGE) {
-    throw new Error('MindAR image tracking is unavailable');
+  try {
+    await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+    const mod = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
+    return mod?.default ?? window.MINDAR?.IMAGE ?? null;
+  } catch (error) {
+    console.warn('MindAR failed to load:', error);
+    return null;
   }
-  return window.MINDAR.IMAGE;
 };
 
 export const ARTracker = ({ 

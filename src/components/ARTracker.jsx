@@ -1,28 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import WeatherHUD from './WeatherHUD';
 
-const loadScript = (src) => new Promise((resolve, reject) => {
-  const existing = document.querySelector(`script[src="${src}"]`);
-  if (existing) {
-    if (existing.dataset.loaded === 'true') {
-      resolve();
-      return;
-    }
-    existing.addEventListener('load', () => resolve(), { once: true });
-    existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
-    return;
+const loadMindAR = async () => {
+  await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
+  if (!window.MINDAR?.IMAGE) {
+    throw new Error('MindAR image tracking is unavailable');
   }
-
-  const script = document.createElement('script');
-  script.src = src;
-  script.async = true;
-  script.addEventListener('load', () => {
-    script.dataset.loaded = 'true';
-    resolve();
-  }, { once: true });
-  script.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
-  document.head.appendChild(script);
-});
+  return window.MINDAR.IMAGE;
+};
 
 export const ARTracker = ({ 
   hotspots, 
@@ -73,13 +58,7 @@ export const ARTracker = ({
 
     const initTargetTracking = async () => {
       try {
-        await loadScript('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js');
-        await loadScript('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
-
-        const MindAR = window.MINDAR?.IMAGE;
-        if (!MindAR) {
-          throw new Error('MindAR image tracking is unavailable');
-        }
+        const MindAR = await loadMindAR();
 
         const compiler = new MindAR.Compiler();
         const muralImage = new Image();

@@ -3,23 +3,20 @@ import axios from 'axios';
 
 const NOAA_BASE = 'https://api.weather.gov';
 
-const toFahrenheit = (celsiusValue) => {
-  if (celsiusValue === null || celsiusValue === undefined || Number.isNaN(Number(celsiusValue))) {
-    return null;
-  }
-
-  return ((Number(celsiusValue) * 9) / 5) + 32;
-};
-
 const parseNumeric = (value) => {
   if (value === null || value === undefined) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 };
 
+const toFahrenheit = (celsiusValue) => {
+  const value = parseNumeric(celsiusValue);
+  if (value === null) return null;
+  return ((value * 9) / 5) + 32;
+};
+
 const parseFeet = (value) => {
   if (value === null || value === undefined) return null;
-
   if (typeof value === 'number') return value;
 
   const cleaned = String(value).replace(/[^\d.\-–—to\s]/g, '').trim();
@@ -27,8 +24,7 @@ const parseFeet = (value) => {
   if (!match) return null;
 
   const numeric = Number(match[0]);
-  if (Number.isNaN(numeric)) return null;
-  return numeric;
+  return Number.isFinite(numeric) ? numeric : null;
 };
 
 const formatTime = (value) => {
@@ -63,6 +59,22 @@ const getMoonIcon = (phase) => {
   return '🌘';
 };
 
+const formatNoaaDate = (date) => {
+  const normalized = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return normalized.toISOString().slice(0, 10).replace(/-/g, '');
+};
+
+const getNextSunEvent = (sunrise, sunset, now) => {
+  const sunriseTime = sunrise ? new Date(sunrise) : null;
+  const sunsetTime = sunset ? new Date(sunset) : null;
+
+  if (!sunriseTime || !sunsetTime) return { label: 'Sunrise', time: null };
+
+  if (now < sunriseTime) return { label: 'Sunrise', time: sunriseTime };
+  if (now < sunsetTime) return { label: 'Sunset', time: sunsetTime };
+  return { label: 'Sunrise', time: sunriseTime };
+};
+
 const getRipCurrentRisk = ({ windMph, waveHeightFt }) => {
   const wind = Number(windMph) || 0;
   const wave = Number(waveHeightFt) || 0;
@@ -74,48 +86,72 @@ const getRipCurrentRisk = ({ windMph, waveHeightFt }) => {
   return { label: 'Very Low', tone: 'bg-cyan-400/90 text-slate-900' };
 };
 
-const getNextSunEvent = (sunrise, sunset, now) => {
-  const sunriseTime = sunrise ? new Date(sunrise) : null;
-  const sunsetTime = sunset ? new Date(sunset) : null;
+const getOpenMeteoData = async (latitude, longitude) => {
+  try {
+    const response = await axios.get(
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m,uv_index&daily=uv_index_max,sunrise,sunset,moon_phase&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`
+    );
 
-  if (!sunriseTime || !sunsetTime) return { label: 'Sunrise', time: '—' };
+    const current = response.data?.current || {};
+    const daily = response.data?.daily || {};
+    const rise = daily.sunrise?.[0] || null;
+    const set = daily.sunset?.[0] || null;
+    const moonPhase = parseNumeric(daily.moon_phase?.[0]);
 
-  if (now < sunriseTime) {
-    return { label: 'Sunrise', time: sunriseTime };
+    return {
+      airTempF: parseNumeric(current.temperature_2m),
+      uvIndex: parseNumeric(current.uv_index ?? daily.uv_index_max?.[0]),
+      windMph: parseNumeric(current.wind_speed_10m),
+      windDirectionDegrees: parseNumeric(current.wind_direction_10m),
+      sunrise: rise,
+      sunset: set,
+      moonPhase: moonPhase !== null ? moonPhase : null,
+    };
+  } catch (error) {
+    console.warn('Open-Meteo data unavailable:', error);
+    return {
+      airTempF: null,
+      uvIndex: null,
+      windMph: null,
+      windDirectionDegrees: null,
+      sunrise: null,
+      sunset: null,
+      moonPhase: null,
+    };
   }
-
-  if (now < sunsetTime) {
-    return { label: 'Sunset', time: sunsetTime };
-  }
-
-  return { label: 'Sunrise', time: sunriseTime };
 };
 
 const getNearestStation = async (latitude, longitude) => {
-  const response = await axios.get(
-    `https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions&radius=25&lat=${latitude}&lon=${longitude}&units=english`
-  );
+  try {
+    const response = await axios.get(
+      `https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions&radius=25&lat=${latitude}&lon=${longitude}&units=english`
+    );
 
-  const stations = response.data?.stations || [];
-  if (!stations.length) return null;
-
-  return stations[0];
+    const stations = response.data?.stations || [];
+    return stations.length ? stations[0] : null;
+  } catch (error) {
+    console.warn('NOAA station lookup failed:', error);
+    return null;
+  }
 };
 
 const getWaterTemperature = async (stationId) => {
   if (!stationId) return null;
 
-  const today = formatNoaaDate(new Date());
-  const response = await axios.get(
-    `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_temperature&application=Anchor&station=${stationId}&begin_date=${today}&end_date=${today}&units=english&time_zone=gmt&format=json`
-  );
+  try {
+    const today = formatNoaaDate(new Date());
+    const response = await axios.get(
+      `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_temperature&application=Anchor&station=${stationId}&begin_date=${today}&end_date=${today}&units=english&time_zone=gmt&format=json`
+    );
 
-  const values = response.data?.data || [];
-  const latest = values[values.length - 1];
-  const value = parseNumeric(latest?.v);
-
-  if (value === null) return null;
-  return toFahrenheit(value);
+    const values = response.data?.data || [];
+    const latest = values[values.length - 1];
+    const value = parseNumeric(latest?.v);
+    return value === null ? null : toFahrenheit(value);
+  } catch (error) {
+    console.warn('Water temperature unavailable:', error);
+    return null;
+  }
 };
 
 const getWaveForecast = async (latitude, longitude) => {
@@ -141,92 +177,78 @@ const getWaveForecast = async (latitude, longitude) => {
     const swellPeriodSec = parseNumeric(first?.swellPeriod || first?.wavePeriod || first?.swellPeriodSec);
 
     return {
-      waveHeightFt: waveHeightFt !== null ? Math.round(waveHeightFt * 10) / 10 : null,
+      waveHeightFt: waveHeightFt !== null ? Number(waveHeightFt.toFixed(1)) : null,
       swellPeriodSec: swellPeriodSec !== null ? Math.round(swellPeriodSec) : null,
     };
   } catch (error) {
-    console.warn('NOAA wave forecast unavailable', error);
+    console.warn('Wave forecast unavailable:', error);
     return { waveHeightFt: null, swellPeriodSec: null };
   }
 };
 
-const formatNoaaDate = (date) => date.toISOString().slice(0, 10).replace(/-/g, '');
-
 const getTideInfo = async (stationId) => {
   if (!stationId) return { currentTideFt: null, nextHigh: null, nextLow: null };
 
-  const now = new Date();
-  const startDate = formatNoaaDate(new Date(now.getTime() - 60 * 60 * 1000));
-  const endDate = formatNoaaDate(new Date(now.getTime() + 48 * 60 * 60 * 1000));
+  try {
+    const now = new Date();
+    const startDate = formatNoaaDate(new Date(now.getTime() - (60 * 60 * 1000)));
+    const endDate = formatNoaaDate(new Date(now.getTime() + (48 * 60 * 60 * 1000)));
 
-  const response = await axios.get(
-    `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&application=Anchor&station=${stationId}&begin_date=${startDate}&end_date=${endDate}&datum=MLLW&time_zone=gmt&units=feet&format=json`
-  );
+    const response = await axios.get(
+      `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&application=Anchor&station=${stationId}&begin_date=${startDate}&end_date=${endDate}&datum=MLLW&time_zone=gmt&units=feet&format=json`
+    );
 
-  const predictions = response.data?.predictions || [];
-  if (!predictions.length) {
+    const predictions = response.data?.predictions || [];
+    if (!predictions.length) {
+      return { currentTideFt: null, nextHigh: null, nextLow: null };
+    }
+
+    const byTime = predictions
+      .map((item) => ({
+        time: new Date(item.t),
+        height: parseNumeric(item.v),
+      }))
+      .filter((item) => item.time && Number.isFinite(item.height));
+
+    if (!byTime.length) {
+      return { currentTideFt: null, nextHigh: null, nextLow: null };
+    }
+
+    const nowMs = now.getTime();
+    const nearest = byTime.reduce((closest, item) => {
+      const diff = Math.abs(item.time.getTime() - nowMs);
+      if (!closest || diff < closest.diff) {
+        return { item, diff };
+      }
+      return closest;
+    }, null)?.item;
+
+    const upcoming = byTime.filter((item) => item.time.getTime() >= nowMs);
+    const nextHigh = upcoming.reduce((best, item) => {
+      if (!best || item.height > best.height) return item;
+      return best;
+    }, null);
+
+    const nextLow = upcoming.reduce((best, item) => {
+      if (!best || item.height < best.height) return item;
+      return best;
+    }, null);
+
+    return {
+      currentTideFt: nearest ? Number(nearest.height.toFixed(1)) : null,
+      nextHigh: nextHigh ? { time: nextHigh.time, height: Number(nextHigh.height.toFixed(1)) } : null,
+      nextLow: nextLow ? { time: nextLow.time, height: Number(nextLow.height.toFixed(1)) } : null,
+    };
+  } catch (error) {
+    console.warn('Tide data unavailable:', error);
     return { currentTideFt: null, nextHigh: null, nextLow: null };
   }
-
-  const byTime = predictions
-    .map((item) => ({
-      time: new Date(item.t),
-      height: parseNumeric(item.v),
-    }))
-    .filter((item) => item.time && Number.isFinite(item.height));
-
-  const nowMs = now.getTime();
-  const nearest = byTime.reduce((closest, item) => {
-    const diff = Math.abs(item.time.getTime() - nowMs);
-    if (!closest || diff < closest.diff) {
-      return { item, diff };
-    }
-    return closest;
-  }, null)?.item;
-
-  const upcoming = byTime.filter((item) => item.time.getTime() >= nowMs);
-  const nextHigh = upcoming.reduce((best, item) => {
-    if (!best || item.height > best.height) return item;
-    return best;
-  }, null);
-
-  const nextLow = upcoming.reduce((best, item) => {
-    if (!best || item.height < best.height) return item;
-    return best;
-  }, null);
-
-  return {
-    currentTideFt: nearest ? Number(nearest.height.toFixed(1)) : null,
-    nextHigh: nextHigh ? { time: nextHigh.time, height: Number(nextHigh.height.toFixed(1)) } : null,
-    nextLow: nextLow ? { time: nextLow.time, height: Number(nextLow.height.toFixed(1)) } : null,
-  };
-};
-
-const getOpenMeteoData = async (latitude, longitude) => {
-  const response = await axios.get(
-    `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m,uv_index&daily=uv_index_max,sunrise,sunset,moon_phase&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`
-  );
-
-  const current = response.data?.current || {};
-  const daily = response.data?.daily || {};
-  const rise = daily.sunrise?.[0];
-  const set = daily.sunset?.[0];
-  const moonPhase = parseNumeric(daily.moon_phase?.[0]);
-
-  return {
-    airTempF: parseNumeric(current.temperature_2m),
-    uvIndex: parseNumeric(current.uv_index ?? daily.uv_index_max?.[0]),
-    windMph: parseNumeric(current.wind_speed_10m),
-    windDirectionDegrees: parseNumeric(current.wind_direction_10m),
-    sunrise: rise || null,
-    sunset: set || null,
-    moonPhase: moonPhase !== null ? moonPhase : null,
-  };
 };
 
 export default function WeatherHUD() {
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -234,7 +256,7 @@ export default function WeatherHUD() {
     const load = async () => {
       try {
         if (!navigator.geolocation) {
-          setLoading(false);
+          setError('Geolocation is unavailable on this device.');
           return;
         }
 
@@ -254,7 +276,7 @@ export default function WeatherHUD() {
           getWaveForecast(latitude, longitude),
         ]);
 
-        const stationId = station?.id;
+        const stationId = station?.id || null;
         const [waterTempF, tideInfo] = await Promise.all([
           getWaterTemperature(stationId),
           getTideInfo(stationId),
@@ -291,8 +313,13 @@ export default function WeatherHUD() {
           nextSunEvent,
           ripRisk,
         });
-      } catch (error) {
-        console.warn('WeatherHUD fetch error:', error);
+        setError(null);
+      } catch (err) {
+        console.error('WeatherHUD fetch error:', err);
+        if (active) {
+          setError(err?.message || 'Failed to load weather data.');
+          setWeather(null);
+        }
       } finally {
         if (active) {
           setLoading(false);
@@ -372,7 +399,7 @@ export default function WeatherHUD() {
 
   if (loading) {
     return (
-      <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center">
+      <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-4">
         <div className="rounded-full border border-white/20 bg-slate-950/70 px-4 py-2 text-xs font-medium text-slate-100 shadow-lg backdrop-blur-sm">
           Loading ocean conditions…
         </div>
@@ -380,8 +407,28 @@ export default function WeatherHUD() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-4">
+        <div className="max-w-sm rounded-2xl border border-red-500/40 bg-slate-950/85 px-4 py-4 text-center text-white shadow-lg backdrop-blur-sm">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-red-300">Weather error</div>
+          <div className="mt-2 text-lg font-semibold">Error: {error}</div>
+          <div className="mt-2 text-xs text-slate-300">Showing fallback state until data is available.</div>
+        </div>
+      </div>
+    );
+  }
+
   if (!weather) {
-    return null;
+    return (
+      <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-4">
+        <div className="max-w-sm rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-4 text-center text-white shadow-lg backdrop-blur-sm">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-200/80">Weather</div>
+          <div className="mt-2 text-lg font-semibold">No data</div>
+          <div className="mt-1 text-xs text-slate-300">Ocean conditions are unavailable right now.</div>
+        </div>
+      </div>
+    );
   }
 
   return (

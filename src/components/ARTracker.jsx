@@ -153,13 +153,22 @@ const HotspotMarker = ({ hotspot, onClick }) => {
 };
 
 const WeatherWidget = ({ data }) => {
+  const waterDisplay =
+    data.waterTemperature !== null && data.waterTemperature !== undefined
+      ? `${data.waterTemperature}°${data.waterTemperatureUnit || 'C'}`
+      : 'Unavailable';
+
   return (
     <div className="bg-white bg-opacity-90 rounded-lg p-3 shadow-lg min-w-max">
       <div className="text-sm font-semibold text-gray-800 mb-2">Ocean Conditions</div>
       <div className="space-y-1 text-xs text-gray-700">
-        <div>🌡️ Temp: {data.temperature}°{data.temperatureUnit}</div>
-        <div>💨 Wind: {data.windSpeed}</div>
-        <div>☀️ UV Index: {data.uvIndex}</div>
+        <div>🌡️ Air: {data.temperature}°{data.temperatureUnit}</div>
+        <div>🌊 Water: {waterDisplay}</div>
+        <div>
+          💨 Wind: {data.windSpeed}
+          {data.windDirection ? ` from ${data.windDirection}` : ''}
+        </div>
+        <div>☀️ UV Index: {data.uvIndex ?? '—'}</div>
       </div>
       <div className="text-xs text-gray-600 mt-2 italic">
         {data.timestamp && new Date(data.timestamp).toLocaleTimeString()}

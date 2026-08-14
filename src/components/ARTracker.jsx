@@ -11,6 +11,7 @@ export const ARTracker = ({
   const videoRef = useRef(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState(false);
+  const [showMuralFallback, setShowMuralFallback] = useState(true);
 
   useEffect(() => {
     const initCamera = async () => {
@@ -42,6 +43,7 @@ export const ARTracker = ({
         console.error('Camera access denied or unavailable:', err);
         setCameraError(true);
         setCameraReady(false);
+        setShowMuralFallback(true);
       }
     };
 
@@ -70,28 +72,35 @@ export const ARTracker = ({
           transform: 'scaleX(-1)'
         }}
       />
+
+      {/* Fallback mural preview so hotspots remain visible even without camera */}
+      {!cameraReady && showMuralFallback && (
+        <img
+          src="/mural.jpg"
+          alt="Mural preview"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
       
       {/* Dark background when camera not ready */}
       {!cameraReady && (
-        <div className="absolute inset-0 bg-black" />
+        <div className="absolute inset-0 bg-black bg-opacity-20" />
       )}
       
-      {/* Hotspot overlay layer - appears on top of video */}
-      {cameraReady && (
-        <div className="absolute inset-0 pointer-events-none">
-          {hotspots && hotspots.map((hotspot) => (
-            <HotspotMarker
-              key={hotspot.id}
-              hotspot={hotspot}
-              onClick={() => onHotspotClick(hotspot.id)}
-            />
-          ))}
-        </div>
-      )}
+      {/* Hotspot overlay layer - visible in both live camera and fallback mural view */}
+      <div className="absolute inset-0 pointer-events-none">
+        {hotspots && hotspots.map((hotspot) => (
+          <HotspotMarker
+            key={hotspot.id}
+            hotspot={hotspot}
+            onClick={() => onHotspotClick(hotspot.id)}
+          />
+        ))}
+      </div>
 
-      {/* Weather overlay - top right */}
-      {weatherOverlay && cameraReady && (
-        <div className="absolute top-4 right-4 pointer-events-auto z-10">
+      {/* Weather overlay - top left for easier testing */}
+      {weatherOverlay && (
+        <div className="absolute top-4 left-4 pointer-events-auto z-10">
           <WeatherWidget data={weatherOverlay} />
         </div>
       )}
@@ -99,10 +108,10 @@ export const ARTracker = ({
       {/* Loading state */}
       {!cameraReady && !cameraError && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center text-white">
+          <div className="text-center text-white bg-black bg-opacity-45 px-6 py-5 rounded-xl">
             <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
             <p className="text-lg mb-2">Initializing Camera...</p>
-            <p className="text-sm text-gray-400">Requesting camera access</p>
+            <p className="text-sm text-gray-300">Requesting camera access</p>
           </div>
         </div>
       )}

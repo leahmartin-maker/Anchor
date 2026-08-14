@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { FiX } from 'react-icons/fi';
+import 'mind-ar/dist/mindar-image-three.prod.js';
 
 export const ARTracker = ({ 
   hotspots, 
@@ -12,15 +12,18 @@ export const ARTracker = ({
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState(false);
   const [showMuralFallback, setShowMuralFallback] = useState(true);
+  const [targetFound, setTargetFound] = useState(false);
 
   useEffect(() => {
-    const initCamera = async () => {
+    let active = true;
+    let mindarInstance = null;
+
+    const initFallbackCamera = async () => {
       try {
         console.log('Requesting camera access...');
-        
-        // Request camera access
+
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { 
+          video: {
             facingMode: 'environment',
             width: { ideal: 1280 },
             height: { ideal: 720 }
@@ -28,29 +31,88 @@ export const ARTracker = ({
           audio: false
         });
 
-        // Connect stream to video element
-        if (videoRef.current) {
+        if (videoRef.current && active) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => {
-            videoRef.current.play().catch(err => {
-              console.error('Video play error:', err);
-            });
+            videoRef.current.play().catch(console.error);
             setCameraReady(true);
             console.log('✓ Camera ready - displaying video feed');
           };
         }
       } catch (err) {
         console.error('Camera access denied or unavailable:', err);
+        if (!active) return;
         setCameraError(true);
         setCameraReady(false);
         setShowMuralFallback(true);
       }
     };
 
-    initCamera();
+    const initTargetTracking = async () => {
+      try {
+        const MindAR = window.MINDAR?.IMAGE;
+        if (!MindAR) {
+          throw new Error('MindAR image tracking is unavailable');
+        }
+
+        const compiler = new MindAR.Compiler();
+        const muralImage = new Image();
+        muralImage.crossOrigin = 'anonymous';
+
+        await new Promise((resolve, reject) => {
+          muralImage.onload = resolve;
+          muralImage.onerror = reject;
+          muralImage.src = '/mural.jpg';
+        });
+
+        const compiledTargets = await compiler.compileImageTargets([muralImage], () => {});
+        const outputBuffer = compiler.exportData();
+        const imageTargetUrl = URL.createObjectURL(
+          new Blob([outputBuffer], { type: 'application/octet-stream' })
+        );
+
+        if (!containerRef.current || !active) return;
+
+        mindarInstance = new MindAR.MindARThree({
+          container: containerRef.current,
+          imageTargetSrc: imageTargetUrl,
+          maxTrack: 1,
+          uiLoading: 'no',
+          uiScanning: 'no',
+          uiError: 'no'
+        });
+
+        const anchor = mindarInstance.addAnchor(0);
+        anchor.onTargetFound = () => {
+          if (active) setTargetFound(true);
+        };
+        anchor.onTargetLost = () => {
+          if (active) setTargetFound(false);
+        };
+
+        await mindarInstance.start();
+        if (!active) return;
+
+        setCameraReady(true);
+        setCameraError(false);
+        setShowMuralFallback(false);
+        console.log('✓ Real image target initialized with mural');
+      } catch (err) {
+        console.warn('MindAR failed, using fallback camera overlay:', err);
+        if (active) {
+          setTargetFound(false);
+          initFallbackCamera();
+        }
+      }
+    };
+
+    initTargetTracking();
 
     return () => {
-      // Stop all tracks on cleanup
+      active = false;
+      if (mindarInstance) {
+        mindarInstance.stop();
+      }
       if (videoRef.current && videoRef.current.srcObject) {
         videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       }
@@ -59,21 +121,19 @@ export const ARTracker = ({
 
   return (
     <div ref={containerRef} className="w-full h-screen bg-black relative overflow-hidden">
-      {/* Camera video feed - main AR background */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
         className="absolute inset-0 w-full h-full object-cover"
-        style={{ 
+        style={{
           display: cameraReady ? 'block' : 'none',
           WebkitTransform: 'scaleX(-1)',
           transform: 'scaleX(-1)'
         }}
       />
 
-      {/* Fallback mural preview so hotspots remain visible even without camera */}
       {!cameraReady && showMuralFallback && (
         <img
           src="/mural.jpg"
@@ -81,14 +141,12 @@ export const ARTracker = ({
           className="absolute inset-0 w-full h-full object-cover"
         />
       )}
-      
-      {/* Dark background when camera not ready */}
+
       {!cameraReady && (
         <div className="absolute inset-0 bg-black bg-opacity-20" />
       )}
-      
-      {/* Hotspot overlay layer - visible in both live camera and fallback mural view */}
-      <div className="absolute inset-0 pointer-events-none">
+
+      <div className="absolute inset-0 pointer-events-none" style={{ opacity: targetFound || !cameraReady ? 1 : 0.15 }}>
         {hotspots && hotspots.map((hotspot) => (
           <HotspotMarker
             key={hotspot.id}
@@ -98,25 +156,28 @@ export const ARTracker = ({
         ))}
       </div>
 
-      {/* Weather overlay - top left for easier testing */}
       {weatherOverlay && (
         <div className="absolute top-4 left-4 pointer-events-auto z-10">
           <WeatherWidget data={weatherOverlay} />
         </div>
       )}
 
-      {/* Loading state */}
+      {cameraReady && targetFound && (
+        <div className="absolute top-4 right-4 z-10 pointer-events-none rounded-full bg-green-500 bg-opacity-90 px-3 py-1 text-xs font-semibold text-white shadow-lg">
+          Target locked
+        </div>
+      )}
+
       {!cameraReady && !cameraError && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center text-white bg-black bg-opacity-45 px-6 py-5 rounded-xl">
             <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
             <p className="text-lg mb-2">Initializing Camera...</p>
-            <p className="text-sm text-gray-300">Requesting camera access</p>
+            <p className="text-sm text-gray-300">Preparing mural target tracking</p>
           </div>
         </div>
       )}
 
-      {/* Camera error state */}
       {cameraError && (
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
           <div className="text-center text-white max-w-xs">

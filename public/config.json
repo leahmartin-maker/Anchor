@@ -1,0 +1,111 @@
+{
+  "version": "1.0.0",
+  "app": {
+    "title": "Marine Mural AR",
+    "description": "Interactive AR experience for the beachfront restaurant mural"
+  },
+  "mural": {
+    "name": "Marine Life Mural",
+    "location": "Beachfront Restaurant",
+    "imageName": "mural.jpg"
+  },
+  "hotspots": [
+    {
+      "id": "hotspot-1",
+      "x": 25,
+      "y": 35,
+      "name": "Sea Turtle",
+      "type": "creature",
+      "creatureId": "sea-turtle"
+    },
+    {
+      "id": "hotspot-2",
+      "x": 60,
+      "y": 45,
+      "name": "Manta Ray",
+      "type": "creature",
+      "creatureId": "manta-ray"
+    },
+    {
+      "id": "hotspot-3",
+      "x": 75,
+      "y": 65,
+      "name": "Octopus",
+      "type": "creature",
+      "creatureId": "octopus"
+    }
+  ],
+  "creatures": [
+    {
+      "id": "sea-turtle",
+      "name": "Sea Turtle",
+      "scientificName": "Chelonia mydas",
+      "imageUrl": "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=300&h=200&fit=crop",
+      "description": "Green sea turtles are graceful marine reptiles that migrate thousands of miles across ocean basins. These ancient mariners can live over 100 years and are vital to maintaining healthy seagrass beds and coral reefs.",
+      "facts": [
+        "Can hold their breath for up to 7 hours underwater",
+        "Travel over 10,000 miles during their lifetime migrations",
+        "The temperature of the sand determines the sex of hatchlings"
+      ],
+      "links": [
+        {
+          "label": "🐢 Sea Turtle Inc.",
+          "url": "https://www.seaturtleinc.org"
+        },
+        {
+          "label": "🌊 Ocean Conservancy",
+          "url": "https://oceanconservancy.org"
+        }
+      ]
+    },
+    {
+      "id": "manta-ray",
+      "name": "Manta Ray",
+      "scientificName": "Manta birostris",
+      "imageUrl": "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=300&h=200&fit=crop",
+      "description": "Manta rays are the largest rays in the world and are known for their intelligence and grace. These gentle giants filter-feed on plankton and can leap high out of the water.",
+      "facts": [
+        "Can weigh up to 5,000 pounds",
+        "Have the largest brain of any fish relative to body size",
+        "Can jump up to 10 feet out of the water"
+      ],
+      "links": [
+        {
+          "label": "🌀 Manta Trust",
+          "url": "https://www.mantatrust.org"
+        }
+      ]
+    },
+    {
+      "id": "octopus",
+      "name": "Octopus",
+      "scientificName": "Octopoda",
+      "imageUrl": "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=300&h=200&fit=crop",
+      "description": "Octopuses are highly intelligent cephalopods with the ability to change color and texture instantly. They are masters of camouflage and use their eight arms to explore and hunt.",
+      "facts": [
+        "Have three hearts and blue blood",
+        "Can squeeze through any hole larger than their beak",
+        "Highly intelligent with complex problem-solving abilities"
+      ],
+      "links": []
+    }
+  ],
+  "anchorHotspot": {
+    "id": "anchor-menu",
+    "x": 50,
+    "y": 80,
+    "name": "Restaurant Menu",
+    "type": "anchor",
+    "actionUrl": "https://example.com/menu"
+  },
+  "weather": {
+    "enabled": true,
+    "updateInterval": 300000,
+    "latitude": 27.7172,
+    "longitude": -82.6505
+  },
+  "xr": {
+    "enableLocationTracking": true,
+    "enableLightEstimation": true
+  }
+}

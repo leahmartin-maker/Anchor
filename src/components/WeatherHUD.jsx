@@ -40,25 +40,6 @@ const formatTime = (value) => {
   }
 };
 
-const formatWindDirection = (degrees) => {
-  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  const index = Math.round(((degrees % 360) / 45)) % 8;
-  return directions[index];
-};
-
-const getMoonIcon = (phase) => {
-  const normalized = ((phase % 1) + 1) % 1;
-
-  if (normalized < 0.0625 || normalized >= 0.9375) return '🌑';
-  if (normalized < 0.1875) return '🌒';
-  if (normalized < 0.3125) return '🌓';
-  if (normalized < 0.4375) return '🌔';
-  if (normalized < 0.5625) return '🌕';
-  if (normalized < 0.6875) return '🌖';
-  if (normalized < 0.8125) return '🌗';
-  return '🌘';
-};
-
 const formatNoaaDate = (date) => {
   const normalized = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
   return normalized.toISOString().slice(0, 10).replace(/-/g, '');
@@ -68,11 +49,10 @@ const getNextSunEvent = (sunrise, sunset, now) => {
   const sunriseTime = sunrise ? new Date(sunrise) : null;
   const sunsetTime = sunset ? new Date(sunset) : null;
 
-  if (!sunriseTime || !sunsetTime) return { label: 'Sunrise', time: null };
-
-  if (now < sunriseTime) return { label: 'Sunrise', time: sunriseTime };
-  if (now < sunsetTime) return { label: 'Sunset', time: sunsetTime };
-  return { label: 'Sunrise', time: sunriseTime };
+  if (!sunriseTime || !sunsetTime) return { time: null };
+  if (now < sunriseTime) return { time: sunriseTime };
+  if (now < sunsetTime) return { time: sunsetTime };
+  return { time: sunriseTime };
 };
 
 const getRipCurrentRisk = ({ windMph, waveHeightFt }) => {
@@ -80,10 +60,10 @@ const getRipCurrentRisk = ({ windMph, waveHeightFt }) => {
   const wave = Number(waveHeightFt) || 0;
   const score = (wind >= 15 ? 1 : 0) + (wind >= 25 ? 1 : 0) + (wave >= 3 ? 1 : 0) + (wave >= 5 ? 1 : 0);
 
-  if (score >= 3) return { label: 'High', tone: 'bg-red-500/90 text-white' };
-  if (score >= 2) return { label: 'Moderate', tone: 'bg-amber-400/90 text-slate-900' };
-  if (score >= 1) return { label: 'Low', tone: 'bg-emerald-400/90 text-slate-900' };
-  return { label: 'Very Low', tone: 'bg-cyan-400/90 text-slate-900' };
+  if (score >= 3) return 'High';
+  if (score >= 2) return 'Moderate';
+  if (score >= 1) return 'Low';
+  return 'Very Low';
 };
 
 const getOpenMeteoData = async (latitude, longitude) => {
@@ -94,8 +74,6 @@ const getOpenMeteoData = async (latitude, longitude) => {
 
     const current = response.data?.current || {};
     const daily = response.data?.daily || {};
-    const rise = daily.sunrise?.[0] || null;
-    const set = daily.sunset?.[0] || null;
     const moonPhase = parseNumeric(daily.moon_phase?.[0]);
 
     return {
@@ -103,8 +81,8 @@ const getOpenMeteoData = async (latitude, longitude) => {
       uvIndex: parseNumeric(current.uv_index ?? daily.uv_index_max?.[0]),
       windMph: parseNumeric(current.wind_speed_10m),
       windDirectionDegrees: parseNumeric(current.wind_direction_10m),
-      sunrise: rise,
-      sunset: set,
+      sunrise: daily.sunrise?.[0] || null,
+      sunset: daily.sunset?.[0] || null,
       moonPhase: moonPhase !== null ? moonPhase : null,
     };
   } catch (error) {
@@ -256,8 +234,7 @@ export default function WeatherHUD() {
     const load = async () => {
       try {
         if (!navigator.geolocation) {
-          setError('Geolocation is unavailable on this device.');
-          return;
+          throw new Error('Geolocation is unavailable on this device.');
         }
 
         const position = await new Promise((resolve, reject) => {
@@ -269,7 +246,6 @@ export default function WeatherHUD() {
         });
 
         const { latitude, longitude } = position.coords;
-
         const [openMeteo, station, waveForecast] = await Promise.all([
           getOpenMeteoData(latitude, longitude),
           getNearestStation(latitude, longitude),
@@ -284,41 +260,36 @@ export default function WeatherHUD() {
 
         if (!active) return;
 
-        const now = new Date();
-        const tideLabel = tideInfo.nextHigh && tideInfo.nextLow
-          ? (tideInfo.nextHigh.time.getTime() < tideInfo.nextLow.time.getTime() ? 'High' : 'Low')
-          : 'Tide';
-
-        const nextSunEvent = getNextSunEvent(openMeteo.sunrise, openMeteo.sunset, now);
-        const ripRisk = getRipCurrentRisk({
-          windMph: openMeteo.windMph,
-          waveHeightFt: waveForecast.waveHeightFt,
-        });
-
         setWeather({
           airTempF: openMeteo.airTempF,
           uvIndex: openMeteo.uvIndex,
           windMph: openMeteo.windMph,
-          windDirection: openMeteo.windDirectionDegrees,
-          waterTempF: waterTempF,
+          waterTempF,
           waveHeightFt: waveForecast.waveHeightFt,
           swellPeriodSec: waveForecast.swellPeriodSec,
           currentTideFt: tideInfo.currentTideFt,
-          nextHigh: tideInfo.nextHigh,
-          nextLow: tideInfo.nextLow,
-          tideLabel,
-          sunrise: openMeteo.sunrise,
-          sunset: openMeteo.sunset,
-          moonPhase: openMeteo.moonPhase,
-          nextSunEvent,
-          ripRisk,
+          nextSunEvent: getNextSunEvent(openMeteo.sunrise, openMeteo.sunset, new Date()),
+          ripRisk: getRipCurrentRisk({
+            windMph: openMeteo.windMph,
+            waveHeightFt: waveForecast.waveHeightFt,
+          }),
         });
         setError(null);
       } catch (err) {
-        console.error('WeatherHUD fetch error:', err);
+        console.warn('WeatherHUD fetch error:', err);
         if (active) {
-          setError(err?.message || 'Failed to load weather data.');
-          setWeather(null);
+          setWeather({
+            airTempF: null,
+            uvIndex: null,
+            windMph: null,
+            waterTempF: null,
+            waveHeightFt: null,
+            swellPeriodSec: null,
+            currentTideFt: null,
+            nextSunEvent: { time: null },
+            ripRisk: '—',
+          });
+          setError(err?.message || 'Weather data unavailable');
         }
       } finally {
         if (active) {
@@ -328,123 +299,184 @@ export default function WeatherHUD() {
     };
 
     load();
-
     return () => {
       active = false;
     };
   }, []);
 
   const cards = useMemo(() => {
-    if (!weather) return [];
+    const data = weather || {
+      airTempF: null,
+      uvIndex: null,
+      windMph: null,
+      waterTempF: null,
+      waveHeightFt: null,
+      swellPeriodSec: null,
+      currentTideFt: null,
+      nextSunEvent: { time: null },
+      ripRisk: '—',
+    };
 
     return [
       {
         key: 'air-temp',
-        placement: 'left-4 top-4',
-        title: 'Air Temp',
-        value: weather.airTempF !== null ? `${Math.round(weather.airTempF)}°F` : '—',
-        subtext: 'Surface air',
+        icon: 'thermometer',
+        value: data.airTempF !== null ? `${Math.round(data.airTempF)}°F` : '—',
+        className: 'left-3 top-3',
+        width: 110,
       },
       {
         key: 'uv-index',
-        placement: 'left-1/2 top-4 -translate-x-1/2',
-        title: 'UV Index',
-        value: weather.uvIndex !== null ? `${Math.round(weather.uvIndex)}` : '—',
-        subtext: 'Exposure',
+        icon: 'sun',
+        value: data.uvIndex !== null ? `${Math.round(data.uvIndex)}` : '—',
+        className: 'left-1/2 top-3 -translate-x-1/2',
+        width: 94,
       },
       {
         key: 'wind',
-        placement: 'right-4 top-4',
-        title: 'Wind',
-        value: weather.windMph !== null ? `${Math.round(weather.windMph)} mph` : '—',
-        subtext: weather.windDirection !== null ? `${formatWindDirection(weather.windDirection)} wind` : 'Direction',
+        icon: 'wind',
+        value: data.windMph !== null ? `${Math.round(data.windMph)} mph` : '—',
+        className: 'right-3 top-3',
+        width: 110,
       },
       {
         key: 'water-temp',
-        placement: 'left-4 top-1/2 -translate-y-1/2',
-        title: 'Water Temp',
-        value: weather.waterTempF !== null ? `${Math.round(weather.waterTempF)}°F` : '—',
-        subtext: 'Surface water',
+        icon: 'water',
+        value: data.waterTempF !== null ? `${Math.round(data.waterTempF)}°F` : '—',
+        className: 'left-3 top-1/2 -translate-y-1/2',
+        width: 110,
       },
       {
         key: 'waves',
-        placement: 'right-4 top-1/2 -translate-y-1/2',
-        title: 'Wave / Swell',
-        value: `${weather.waveHeightFt !== null ? `${weather.waveHeightFt.toFixed(1)} ft` : '—'} / ${weather.swellPeriodSec !== null ? `${weather.swellPeriodSec}s` : '—'}`,
-        subtext: 'Height / period',
+        icon: 'wave',
+        value: `${data.waveHeightFt !== null ? `${data.waveHeightFt.toFixed(1)} ft` : '—'} / ${data.swellPeriodSec !== null ? `${data.swellPeriodSec}s` : '—'}`,
+        className: 'right-3 top-1/2 -translate-y-1/2',
+        width: 150,
       },
       {
-        key: 'risk',
-        placement: 'left-4 bottom-4',
-        title: 'Rip Current',
-        value: weather.ripRisk.label,
-        subtext: `${weather.windMph !== null ? `${Math.round(weather.windMph)} mph wind` : 'Wind'} · ${weather.waveHeightFt !== null ? `${weather.waveHeightFt.toFixed(1)} ft swell` : 'Wave data'}`,
+        key: 'rip-current',
+        icon: 'alert',
+        value: data.ripRisk || '—',
+        className: 'left-3 bottom-3',
+        width: 110,
       },
       {
         key: 'tide',
-        placement: 'left-1/2 bottom-4 -translate-x-1/2',
-        title: 'Tide',
-        value: `${weather.currentTideFt !== null ? `${weather.currentTideFt.toFixed(1)} ft` : '—'}`,
-        subtext: `${weather.nextHigh ? `Next high ${formatTime(weather.nextHigh.time)}` : 'Next high —'} · ${weather.nextLow ? `Next low ${formatTime(weather.nextLow.time)}` : 'Next low —'}`,
+        icon: 'tide',
+        value: data.currentTideFt !== null ? `${data.currentTideFt.toFixed(1)} ft` : '—',
+        className: 'left-1/2 bottom-3 -translate-x-1/2',
+        width: 120,
       },
       {
-        key: 'moon',
-        placement: 'right-4 bottom-4',
-        title: 'Moon / Sun',
-        value: `${weather.moonPhase !== null ? getMoonIcon(weather.moonPhase) : '🌙'} ${weather.nextSunEvent.time ? formatTime(weather.nextSunEvent.time) : '—'}`,
-        subtext: weather.nextSunEvent.label,
+        key: 'moon-sun',
+        icon: data.nextSunEvent?.time ? 'sun' : 'moon',
+        value: data.nextSunEvent?.time ? formatTime(data.nextSunEvent.time) : '—',
+        className: 'right-3 bottom-3',
+        width: 118,
       },
     ];
   }, [weather]);
 
-  if (loading) {
-    return (
-      <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-4">
-        <div className="rounded-full border border-white/20 bg-slate-950/70 px-4 py-2 text-xs font-medium text-slate-100 shadow-lg backdrop-blur-sm">
-          Loading ocean conditions…
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-4">
-        <div className="max-w-sm rounded-2xl border border-red-500/40 bg-slate-950/85 px-4 py-4 text-center text-white shadow-lg backdrop-blur-sm">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-red-300">Weather error</div>
-          <div className="mt-2 text-lg font-semibold">Error: {error}</div>
-          <div className="mt-2 text-xs text-slate-300">Showing fallback state until data is available.</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!weather) {
-    return (
-      <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-4">
-        <div className="max-w-sm rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-4 text-center text-white shadow-lg backdrop-blur-sm">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-200/80">Weather</div>
-          <div className="mt-2 text-lg font-semibold">No data</div>
-          <div className="mt-1 text-xs text-slate-300">Ocean conditions are unavailable right now.</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="pointer-events-none fixed inset-0 z-30">
+    <div className="pointer-events-none fixed inset-0 z-30" style={{ inset: 10 }}>
       {cards.map((card) => (
         <div
           key={card.key}
-          className={`absolute ${card.placement} min-w-[180px] max-w-[220px] rounded-2xl border border-white/20 bg-slate-950/70 px-3 py-2 text-white shadow-lg backdrop-blur-sm`}
+          className={`absolute ${card.className} flex items-center justify-between gap-2 rounded-[12px] border border-white/10 bg-black/75 px-2.5 py-2 shadow-lg backdrop-blur-sm`}
+          style={{
+            width: card.width,
+            minHeight: 42,
+            padding: '8px 10px',
+            opacity: 0.8,
+          }}
         >
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-200/80">
-            {card.title}
+          <div className="flex h-5 w-5 items-center justify-center text-white/90">
+            {loading ? (
+              <span className="block h-3.5 w-3.5 rounded-full border-2 border-white/35 border-t-white animate-spin" />
+            ) : (
+              <WeatherIcon type={card.icon} />
+            )}
           </div>
-          <div className="text-lg font-bold tracking-tight text-white">{card.value}</div>
-          <div className="mt-1 text-[10px] leading-relaxed text-slate-200/80 whitespace-pre-line">{card.subtext}</div>
+
+          <div className="flex min-w-0 flex-1 items-center justify-end overflow-hidden text-right">
+            {loading ? (
+              <span className="block h-3.5 w-3.5 rounded-full border-2 border-white/35 border-t-white animate-spin" />
+            ) : (
+              <span className="text-[13px] font-bold leading-none text-white">{card.value}</span>
+            )}
+          </div>
         </div>
       ))}
     </div>
   );
+}
+
+function WeatherIcon({ type }) {
+  const base = 'h-4 w-4 stroke-current fill-none stroke-[1.8]';
+
+  switch (type) {
+    case 'thermometer':
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <path d="M14 4.5a2.5 2.5 0 1 0-5 0V13a4.5 4.5 0 1 0 5 0V4.5Z" />
+          <path d="M12 15.5v-7" />
+          <path d="M12 15.5a2 2 0 1 1 0 4a2 2 0 0 1 0-4Z" />
+        </svg>
+      );
+    case 'water':
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <path d="M12 3.5c3.2 4.1 5 6.1 5 8.7A5 5 0 1 1 7 12.2c0-2.6 1.8-4.6 5-8.7Z" />
+        </svg>
+      );
+    case 'wind':
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <path d="M3 9h12a2 2 0 1 0-2-2" />
+          <path d="M3 15h15a2 2 0 1 1-2 2" />
+          <path d="M4 12h16" />
+        </svg>
+      );
+    case 'sun':
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2L5.6 5.6" />
+        </svg>
+      );
+    case 'wave':
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <path d="M2 14c2.3 0 2.3-2 4.5-2s2.2 2 4.5 2 2.2-2 4.5-2 2.2 2 4.5 2" />
+          <path d="M2 18c2.3 0 2.3-2 4.5-2s2.2 2 4.5 2 2.2-2 4.5-2 2.2 2 4.5 2" />
+        </svg>
+      );
+    case 'alert':
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <path d="M12 3.5 21 19H3L12 3.5Z" />
+          <path d="M12 8.5v4.8" />
+          <path d="M12 17.2h.01" />
+        </svg>
+      );
+    case 'tide':
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <path d="M5 15c2-2 3.8-2 5.6 0s3.6 2 5.4 0 3.1-2 5 0" />
+          <path d="M5 11c2-2 3.8-2 5.6 0s3.6 2 5.4 0 3.1-2 5 0" />
+        </svg>
+      );
+    case 'moon':
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <path d="M14.8 3.8A7.5 7.5 0 1 0 20.2 13a6 6 0 0 1-5.4-9.2Z" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" className={base} aria-hidden="true">
+          <circle cx="12" cy="12" r="8" />
+        </svg>
+      );
+  }
 }

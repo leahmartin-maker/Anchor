@@ -244,9 +244,10 @@ export const ARTracker = ({
 };
 
 const HotspotMarker = ({ hotspot, onClick }) => {
+    console.log(`Rendering hotspot:' , hotspot.x, hotspot.y, hotspot.name`);
   return (
     <button
-      className="absolute w-12 h-12 rounded-full bg-blue-500 bg-opacity-70 hover:bg-opacity-100 flex items-center justify-center text-white text-xl pointer-events-auto transform -translate-x-1/2 -translate-y-1/2 transition-all hover:scale-110 shadow-lg"
+      className="absolute w-12 h-12 rounded-full bg-blue-500 bg-opacity-70 hover:bg-opacity-100 flex items-center justify-center text-white text-xl pointer-events-auto transform -translate-x-1/2 -translate-y-1/2 transition-all hover:scale-110 shadow-lg z-50"
       style={{
         left: `${hotspot.x}%`,
         top: `${hotspot.y}%`,

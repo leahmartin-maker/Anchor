@@ -170,8 +170,6 @@ export const ARTracker = ({
         className="absolute inset-0 w-full h-full object-cover"
         style={{
           display: 'block',
-          WebkitTransform: 'scaleX(-1)',
-          transform: 'scaleX(-1)',
           visibility: cameraReady ? 'visible' : 'hidden'
         }}
       />

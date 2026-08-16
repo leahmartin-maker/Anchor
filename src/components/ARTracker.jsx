@@ -161,6 +161,7 @@ export const ARTracker = ({
   }, []);
 
 return (
+<>
     {/* Debug console overlay */}
     <div className="fixed top-0 left-0 bg-black bg-opacity-90 text-white text-xs p-2 max-w-xs max-h-32 overflow-auto z-[9999] font-mono">
       <div>Camera: {cameraReady ? '✓' : '✗'}</div>
@@ -204,7 +205,6 @@ return (
       </div>
 
       <WeatherHUD />
-
       {cameraReady && targetFound && (
         <div className="absolute top-4 right-4 z-10 pointer-events-none rounded-full bg-green-500 bg-opacity-90 px-3 py-1 text-xs font-semibold text-white shadow-lg">
           Target locked
@@ -246,6 +246,7 @@ return (
         </div>
       )}
     </div>
+    </>
   );
 };
 

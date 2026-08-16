@@ -169,9 +169,10 @@ export const ARTracker = ({
         muted
         className="absolute inset-0 w-full h-full object-cover"
         style={{
-          display: cameraReady ? 'block' : 'none',
+          display: 'block',
           WebkitTransform: 'scaleX(-1)',
-          transform: 'scaleX(-1)'
+          transform: 'scaleX(-1)',
+          visibility: cameraReady ? 'visible' : 'hidden'
         }}
       />
 

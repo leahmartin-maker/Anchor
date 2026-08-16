@@ -160,7 +160,14 @@ export const ARTracker = ({
     };
   }, []);
 
-  return (
+return (
+    {/* Debug console overlay */}
+    <div className="fixed top-0 left-0 bg-black bg-opacity-90 text-white text-xs p-2 max-w-xs max-h-32 overflow-auto z-[9999] font-mono">
+      <div>Camera: {cameraReady ? '✓' : '✗'}</div>
+      <div>Target Found: {targetFound ? '✓' : '✗'}</div>
+      <div>Error: {cameraError ? 'YES' : 'NO'}</div>
+    </div>
+
     <div ref={containerRef} className="w-full h-screen bg-black relative overflow-hidden">
       <video
         ref={videoRef}
